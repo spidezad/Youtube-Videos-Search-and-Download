@@ -9,11 +9,14 @@
 
  Usage:
      Search and Download the list of youtube videos/audio. Presently can only scan for playlist to download.
-
+     
  Required:
      python pattern
      pafy -- for downloading youtube videos.
 
+ Updates:
+     Aug 01 2015: Include filter url portion
+                  Enable sorting before download
 
  Learnings:
 
@@ -22,6 +25,12 @@
 
     Identify item using firefox inspect element and copy the xpath
     dom_object('div h3 a') --> return the search results --> need to go individual to see more videos
+
+    Age restriction handling
+    http://digiwonk.wonderhowto.com/how-to/easiest-tricks-for-bypassing-youtubes-annoying-age-restrictions-nsfw-videos-0142999/
+
+    Advanced search youtube
+    https://support.google.com/youtube/answer/111997?hl=en
 
     xpath with text containing key phrases
     http://stackoverflow.com/questions/247135/using-xpath-to-search-text-containing
@@ -40,6 +49,11 @@
  ToDo:
     Search for individual songs instead of playlist
     able to download in chunks
+    include sorting the links with the title
+    split into playlist and non playlist type
+    additional filter with leng limit
+
+    read from file and multiple folder download according to keywords
     
     
 
@@ -70,14 +84,17 @@ class YouTubeHandler(object):
         self.retreive_fr_playlist = 1 # assume search for the playlist
         self.num_playlist_to_scan = 10 # get the number of playlist to scan.
         self.download_as_audio =1 # if 0 - download as video
+        self.enable_sorted_download = 1 # 1 -enable sorted title before download
         
         ## url construct string text
         self.prefix_of_search_url = "https://www.youtube.com/results?search_query="
         self.target_yt_search_url_str = ''
+        self.filter_url_portion = '&filters=playlist'#can add in different filter url portion, default set to playlist filter
     
         ## Intermediate outputs
         self.playlist_url_list = []#list of playlist url obtained from the search results.
-        self.video_link_title_dict = {} # 
+        self.video_link_title_dict = {} #
+        self.video_link_title_keylist = []#will be the list of dict key for the self.video_link_title_dict, for sorting purpose
 
         ## Storage
         self.video_download_folder = r'c:\data\temp\youtube_videos\\'
@@ -99,7 +116,7 @@ class YouTubeHandler(object):
             Set to self.target_yt_search_url_str
         """
         self.reformat_search_for_spaces()
-        self.target_yt_search_url_str = self.prefix_of_search_url + self.yt_search_key 
+        self.target_yt_search_url_str = self.prefix_of_search_url + self.yt_search_key + self.filter_url_portion 
 
     def get_dom_object(self, url_target):
         """ Get dom object based on element for scraping
@@ -221,7 +238,15 @@ class YouTubeHandler(object):
                 if not os.path.isfile(download_fullpath):
                     bestaudio.download(download_fullpath, quiet= True)
         except:
-            print 'Have problem downloading this file', video_title
+            #print 'Have problem downloading this file', video_title
+            print 'Have problem downloading this file'
+
+    def sort_video_title(self):
+        """ Sort the video according to title when download.
+            Will sort across all playlist if more than one playlist are selected.
+            Set to self.video_link_title_keylist
+        """
+        self.video_link_title_keylist = sorted(self.video_link_title_keylist)
 
     def download_all_videos(self, dl_limit =10):
         """ Download all video given in self.video_link_title_dict
@@ -231,14 +256,31 @@ class YouTubeHandler(object):
 
         """
         counter = dl_limit
-        for title in self.video_link_title_dict.keys():
-            print 'downloading title: ', title
+        self.video_link_title_keylist = self.video_link_title_dict.keys()
+
+        if self.enable_sorted_download:
+            self.sort_video_title()
+
+
+        for title in self.video_link_title_keylist:
+            #print 'downloading title: ', title
+            print 'downloading title with counter: ', counter
             if not counter:
                 return
             self.download_video(self.video_link_title_dict[title], title)
             counter = counter -1
     
+def get_searchlist_fr_file(filename):
+    """Get search list from filename. Ability to add in a lot of phrases.
+        Will replace the self.g_search_key_list.
+        Will ignore those that are commented, i.e, marked with '#'
+        Args:
+            filename (str): full file path
+    """
+    with open(filename,'r') as f:
+        g_search_key_list = f.readlines()
 
+    return [n for n in g_search_key_list if not n.startswith('#')]
 
                     
 if __name__ == '__main__':
@@ -247,31 +289,53 @@ if __name__ == '__main__':
         Selection.
         1 -- normal run
         2 -- check on pafy and also to download individual file based on url.
+
+        Note: may not be very re
         
     """
     
-    choice = 1
+    choice = 2
 
     if choice == 1:
         """
 
         """
-        search_key = 'chinese top ktv' #keywords
+        search_key = r'Tableau storyboard' #keywords
         yy = YouTubeHandler(search_key)
-        yy.download_as_audio =1
-        yy.set_num_playlist_to_extract(5)
+        yy.download_as_audio =0
+        yy.enable_sorted_download = 0
+        yy.set_num_playlist_to_extract(10)
         yy.get_playlist_url_list()
         #print yy.playlist_url_list
+        #yy.playlist_url_list = yy.playlist_url_list[3:]
+
         yy.get_video_link_fr_all_playlist()
 ##        for key in  yy.video_link_title_dict.keys():
 ##            print key, '  ', yy.video_link_title_dict[key]
 ##            print
 ##        print
-        #print 'download video'
-        #yy.download_all_videos(dl_limit =200)
+        print 'download video'
+        yy.download_all_videos(dl_limit =5)
+
+    if choice ==2:
+        filename = r'c:\data\temp\youtube_searchlist.txt'
+        keyword_list = get_searchlist_fr_file(filename)
+        for search_key in keyword_list:
+            yy = YouTubeHandler(search_key)
+            yy.download_as_audio =0
+            yy.enable_sorted_download = 0
+            yy.set_num_playlist_to_extract(10)
+            yy.get_playlist_url_list()
+            #print yy.playlist_url_list
+            #yy.playlist_url_list = yy.playlist_url_list[3:]
+
+            yy.get_video_link_fr_all_playlist()
+            print 'download video'
+            yy.download_all_videos(dl_limit =5)
+
         
 
-    if choice == 2:
+    if choice == 3:
         """
             For trying out the pafy or can be used to download individual songs.
 
@@ -281,7 +345,7 @@ if __name__ == '__main__':
         video = pafy.new(sample_video_link)
         print video.title
 
-        use_audio = 1
+        use_audio = 0
 
         if not use_audio:
 
